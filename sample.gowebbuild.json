@@ -1,0 +1,41 @@
+{
+  "Watch": {
+    "Path": "./frontend/src"
+  },
+  "Copy": [
+    {
+      "Src": "./frontend/index.html",
+      "Dest": "./api/frontend-dist"
+    },
+    {
+      "Src": "./frontend/src/audio",
+      "Dest": "./api/frontend-dist/audio"
+    },
+    {
+      "Src": "./frontend/src/icon-*.png",
+      "Dest": "./api/frontend-dist"
+    },
+    {
+      "Src": "./frontend/src/manifest.webmanifest",
+      "Dest": "./api/frontend-dist"
+    },
+    {
+      "Src": "./frontend/src/workbox-config.js",
+      "Dest": "./api/frontend-dist"
+    }
+  ],
+  "ESBuild": {
+    "EntryPoints": [
+      "./frontend/src/the-app.js",
+      "./frontend/src/serviceworker.js"
+    ],
+    "Outdir":    "./api/frontend-dist",
+    "Sourcemap": 1,
+    "Format":    3,
+    "Splitting": true,
+    "Platform":  0,
+    "Bundle":    true,
+    "Write":     true,
+    "LogLevel":  3
+  }
+}

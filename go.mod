@@ -6,6 +6,7 @@ require (
 	github.com/evanw/esbuild v0.14.5
 	github.com/goyek/goyek v0.6.0
 	github.com/jaschaephraim/lrserver v0.0.0-20171129202958-50d19f603f71
+	github.com/otiai10/copy v1.7.0
 	github.com/radovskyb/watcher v1.0.7
 )
 

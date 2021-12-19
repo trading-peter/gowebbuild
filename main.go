@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/goyek/goyek"
 	"github.com/jaschaephraim/lrserver"
+	"github.com/otiai10/copy"
 	"github.com/radovskyb/watcher"
 )
 
@@ -20,6 +22,10 @@ type options struct {
 	ESBuild api.BuildOptions
 	Watch   struct {
 		Path string
+	}
+	Copy []struct {
+		Src  string
+		Dest string
 	}
 }
 
@@ -63,6 +69,7 @@ func main() {
 						select {
 						case event := <-w.Event:
 							fmt.Printf("File %s changed\n", event.Name())
+							cp(opts)
 							build(opts)
 						case err := <-w.Error:
 							fmt.Println(err.Error())
@@ -105,12 +112,50 @@ func main() {
 	flow.Main()
 }
 
+func cp(opts options) {
+	if len(opts.Copy) == 0 {
+		fmt.Println("Nothing to copy")
+		return
+	}
+	for _, op := range opts.Copy {
+		paths, err := filepath.Glob(op.Src)
+		if err != nil {
+			fmt.Printf("Invalid glob pattern: %s\n", op.Src)
+			continue
+		}
+
+		destIsDir := isDir(op.Dest)
+		for _, p := range paths {
+			d := op.Dest
+
+			if destIsDir && isFile(p) {
+				d = filepath.Join(d, filepath.Base(p))
+			}
+			err := copy.Copy(p, d)
+			fmt.Printf("Copying %s to %s\n", p, d)
+
+			if err != nil {
+				fmt.Printf("Failed to copy %s: %v\n", p, err)
+				continue
+			}
+		}
+	}
+}
+
+func isFile(path string) bool {
+	stat, _ := os.Stat(path)
+	return !stat.IsDir()
+}
+
+func isDir(path string) bool {
+	stat, _ := os.Stat(path)
+	return stat.IsDir()
+}
+
 func build(opts options) {
 	result := api.Build(opts.ESBuild)
 
-	if len(result.Errors) > 0 {
-		os.Exit(1)
-	} else {
+	if len(result.Errors) == 0 {
 		triggerReload <- struct{}{}
 	}
 }
