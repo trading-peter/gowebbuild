@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -143,13 +144,24 @@ func cp(opts options) {
 }
 
 func isFile(path string) bool {
-	stat, _ := os.Stat(path)
+	stat, err := os.Stat(path)
+
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+
 	return !stat.IsDir()
 }
 
 func isDir(path string) bool {
-	stat, _ := os.Stat(path)
-	return stat.IsDir()
+	stat, err := os.Stat(path)
+
+	if errors.Is(err, os.ErrNotExist) {
+		os.MkdirAll(path, 0755)
+		return true
+	}
+
+	return err == nil && stat.IsDir()
 }
 
 func build(opts options) {
