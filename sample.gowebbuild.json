@@ -1,6 +1,7 @@
 {
   "Watch": {
-    "Path": "./frontend/src"
+    "Path": "./frontend/src",
+    "Exclude": [ "./dist" ]
   },
   "Copy": [
     {

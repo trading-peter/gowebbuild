@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -21,7 +22,8 @@ var triggerReload = make(chan struct{})
 type options struct {
 	ESBuild api.BuildOptions
 	Watch   struct {
-		Path string
+		Path    string
+		Exclude []string
 	}
 	Copy []struct {
 		Src  string
@@ -30,26 +32,34 @@ type options struct {
 }
 
 func main() {
-	opts := options{}
-	cfgContent, err := os.ReadFile("./.gowebbuild.json")
-
-	if err != nil {
-		fmt.Printf("%+v\n", err)
-		os.Exit(1)
-	}
-
-	err = json.Unmarshal(cfgContent, &opts)
-	if err != nil {
-		fmt.Printf("%+v\n", err)
-		os.Exit(1)
-	}
-
 	flow := &goyek.Flow{}
+	opts := options{}
 
-	flow.Register(goyek.Task{
-		Name:  "watch-frontend",
-		Usage: "",
+	cfgPathParam := flow.RegisterStringParam(goyek.StringParam{
+		Name:    "c",
+		Usage:   "Path to config file config file.",
+		Default: "./.gowebbuild.json",
+	})
+
+	watchFrontend := goyek.Task{
+		Name:   "watch-frontend",
+		Usage:  "",
+		Params: goyek.Params{cfgPathParam},
 		Action: func(tf *goyek.TF) {
+			cfgPath := cfgPathParam.Get(tf)
+			cfgContent, err := os.ReadFile(cfgPath)
+
+			if err != nil {
+				fmt.Printf("%+v\n", err)
+				os.Exit(1)
+			}
+
+			err = json.Unmarshal(cfgContent, &opts)
+			if err != nil {
+				fmt.Printf("%+v\n", err)
+				os.Exit(1)
+			}
+
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
@@ -59,6 +69,11 @@ func main() {
 				w := watcher.New()
 				w.SetMaxEvents(1)
 				w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
+
+				if len(opts.Watch.Exclude) > 0 {
+					w.Ignore(opts.Watch.Exclude...)
+				}
+
 				if err := w.AddRecursive(opts.Watch.Path); err != nil {
 					fmt.Println(err.Error())
 					os.Exit(1)
@@ -80,6 +95,9 @@ func main() {
 				}()
 
 				fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Path)
+
+				cp(opts)
+				build(opts)
 
 				if err := w.Start(time.Millisecond * 100); err != nil {
 					fmt.Println(err.Error())
@@ -107,8 +125,9 @@ func main() {
 			fmt.Println("\nExit")
 			os.Exit(0)
 		},
-	})
+	}
 
+	flow.DefaultTask = flow.Register(watchFrontend)
 	flow.Main()
 }
 
@@ -143,13 +162,24 @@ func cp(opts options) {
 }
 
 func isFile(path string) bool {
-	stat, _ := os.Stat(path)
+	stat, err := os.Stat(path)
+
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+
 	return !stat.IsDir()
 }
 
 func isDir(path string) bool {
-	stat, _ := os.Stat(path)
-	return stat.IsDir()
+	stat, err := os.Stat(path)
+
+	if errors.Is(err, os.ErrNotExist) {
+		os.MkdirAll(path, 0755)
+		return true
+	}
+
+	return err == nil && stat.IsDir()
 }
 
 func build(opts options) {
