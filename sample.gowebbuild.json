@@ -25,6 +25,13 @@
       "Dest": "./api/frontend-dist"
     }
   ],
+  "Replace": [
+    {
+      "Pattern": "*.go|*.js|*.html",
+      "Search": "Something",
+      "Replace": "This"
+    }
+  ],
   "ESBuild": {
     "EntryPoints": [
       "./frontend/src/the-app.js",

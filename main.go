@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +31,11 @@ type options struct {
 		Src  string
 		Dest string
 	}
+	Replace []struct {
+		Pattern string
+		Search  string
+		Replace string
+	}
 }
 
 func main() {
@@ -40,6 +47,45 @@ func main() {
 		Usage:   "Path to config file config file.",
 		Default: "./.gowebbuild.json",
 	})
+
+	prodParam := flow.RegisterBoolParam(goyek.BoolParam{
+		Name:    "p",
+		Usage:   "Use production ready build settings",
+		Default: false,
+	})
+
+	buildOnly := goyek.Task{
+		Name:   "build",
+		Usage:  "",
+		Params: goyek.Params{cfgPathParam, prodParam},
+		Action: func(tf *goyek.TF) {
+			cfgPath := cfgPathParam.Get(tf)
+			cfgContent, err := os.ReadFile(cfgPath)
+
+			if err != nil {
+				fmt.Printf("%+v\n", err)
+				os.Exit(1)
+			}
+
+			err = json.Unmarshal(cfgContent, &opts)
+			if err != nil {
+				fmt.Printf("%+v\n", err)
+				os.Exit(1)
+			}
+
+			cp(opts)
+			replace(opts)
+
+			if prodParam.Get(tf) {
+				opts.ESBuild.MinifyIdentifiers = true
+				opts.ESBuild.MinifySyntax = true
+				opts.ESBuild.MinifyWhitespace = true
+				opts.ESBuild.Sourcemap = api.SourceMapNone
+			}
+
+			api.Build(opts.ESBuild)
+		},
+	}
 
 	watchFrontend := goyek.Task{
 		Name:   "watch-frontend",
@@ -86,6 +132,7 @@ func main() {
 							fmt.Printf("File %s changed\n", event.Name())
 							cp(opts)
 							build(opts)
+							replace(opts)
 						case err := <-w.Error:
 							fmt.Println(err.Error())
 						case <-w.Closed:
@@ -98,6 +145,7 @@ func main() {
 
 				cp(opts)
 				build(opts)
+				replace(opts)
 
 				if err := w.Start(time.Millisecond * 100); err != nil {
 					fmt.Println(err.Error())
@@ -128,6 +176,7 @@ func main() {
 	}
 
 	flow.DefaultTask = flow.Register(watchFrontend)
+	flow.Register(buildOnly)
 	flow.Main()
 }
 
@@ -156,6 +205,47 @@ func cp(opts options) {
 			if err != nil {
 				fmt.Printf("Failed to copy %s: %v\n", p, err)
 				continue
+			}
+		}
+	}
+}
+
+func replace(opts options) {
+	if len(opts.Replace) == 0 {
+		fmt.Println("Nothing to replace")
+		return
+	}
+	for _, op := range opts.Replace {
+		paths, err := filepath.Glob(op.Pattern)
+		if err != nil {
+			fmt.Printf("Invalid glob pattern: %s\n", op.Pattern)
+			continue
+		}
+		fmt.Printf("Paths: %+v\n", paths)
+		for _, p := range paths {
+			if !isFile(p) {
+				continue
+			}
+
+			read, err := ioutil.ReadFile(p)
+			if err != nil {
+				fmt.Printf("%+v\n", err)
+				os.Exit(1)
+			}
+
+			r := op.Replace
+			if strings.HasPrefix(op.Replace, "$") {
+				r = os.ExpandEnv(op.Replace)
+			}
+
+			if strings.Contains(string(read), op.Search) {
+				fmt.Printf("Replacing '%s' with '%s' in %s\n", op.Search, r, p)
+				newContents := strings.Replace(string(read), op.Search, r, -1)
+				err = ioutil.WriteFile(p, []byte(newContents), 0)
+				if err != nil {
+					fmt.Printf("%+v\n", err)
+					os.Exit(1)
+				}
 			}
 		}
 	}
