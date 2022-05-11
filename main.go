@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,6 +27,10 @@ type options struct {
 	Watch   struct {
 		Path    string
 		Exclude []string
+	}
+	Serve struct {
+		Path string
+		Port int
 	}
 	Copy []struct {
 		Src  string
@@ -74,7 +79,6 @@ func main() {
 			}
 
 			cp(opts)
-			replace(opts)
 
 			if prodParam.Get(tf) {
 				opts.ESBuild.MinifyIdentifiers = true
@@ -84,11 +88,12 @@ func main() {
 			}
 
 			api.Build(opts.ESBuild)
+			replace(opts)
 		},
 	}
 
-	watchFrontend := goyek.Task{
-		Name:   "watch-frontend",
+	watch := goyek.Task{
+		Name:   "watch",
 		Usage:  "",
 		Params: goyek.Params{cfgPathParam},
 		Action: func(tf *goyek.TF) {
@@ -169,13 +174,32 @@ func main() {
 				}
 			}()
 
+			if opts.Serve.Path != "" {
+				go func() {
+					port := 8888
+					if opts.Serve.Port != 0 {
+						port = opts.Serve.Port
+					}
+
+					http.Handle("/", http.FileServer(http.Dir(opts.Serve.Path)))
+
+					fmt.Printf("Serving contents of %s at :%d\n", opts.Serve.Path, port)
+					err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+
+					if err != nil {
+						fmt.Printf("%+v\n", err.Error())
+						os.Exit(1)
+					}
+				}()
+			}
+
 			<-c
 			fmt.Println("\nExit")
 			os.Exit(0)
 		},
 	}
 
-	flow.DefaultTask = flow.Register(watchFrontend)
+	flow.DefaultTask = flow.Register(watch)
 	flow.Register(buildOnly)
 	flow.Main()
 }
@@ -221,7 +245,7 @@ func replace(opts options) {
 			fmt.Printf("Invalid glob pattern: %s\n", op.Pattern)
 			continue
 		}
-		fmt.Printf("Paths: %+v\n", paths)
+
 		for _, p := range paths {
 			if !isFile(p) {
 				continue
@@ -238,10 +262,13 @@ func replace(opts options) {
 				r = os.ExpandEnv(op.Replace)
 			}
 
-			if strings.Contains(string(read), op.Search) {
-				fmt.Printf("Replacing '%s' with '%s' in %s\n", op.Search, r, p)
-				newContents := strings.Replace(string(read), op.Search, r, -1)
+			count := strings.Count(string(read), op.Search)
+
+			if count > 0 {
+				fmt.Printf("Replacing %d occurrences of '%s' with '%s' in %s\n", count, op.Search, r, p)
+				newContents := strings.ReplaceAll(string(read), op.Search, r)
 				err = ioutil.WriteFile(p, []byte(newContents), 0)
+
 				if err != nil {
 					fmt.Printf("%+v\n", err)
 					os.Exit(1)
