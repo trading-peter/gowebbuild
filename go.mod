@@ -1,4 +1,4 @@
-module gitlab.codeblob.work/pk/gowebbuild
+module github.com/trading-peter/gowebbuild
 
 go 1.17
 
