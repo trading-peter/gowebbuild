@@ -41,11 +41,39 @@ type options struct {
 		Search  string
 		Replace string
 	}
+	Link struct {
+		From string
+		To   string
+	}
+}
+
+func readCfg(cfgPath string) []options {
+	cfgContent, err := os.ReadFile(cfgPath)
+
+	if err != nil {
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
+	}
+
+	optsSetups := []options{}
+
+	err = json.Unmarshal(cfgContent, &optsSetups)
+	if err != nil {
+		opt := options{}
+		err = json.Unmarshal(cfgContent, &opt)
+		if err != nil {
+			fmt.Printf("%+v\n", err)
+			os.Exit(1)
+		}
+
+		optsSetups = append(optsSetups, opt)
+	}
+
+	return optsSetups
 }
 
 func main() {
 	flow := &goyek.Flow{}
-	opts := options{}
 
 	cfgPathParam := flow.RegisterStringParam(goyek.StringParam{
 		Name:    "c",
@@ -65,30 +93,22 @@ func main() {
 		Params: goyek.Params{cfgPathParam, prodParam},
 		Action: func(tf *goyek.TF) {
 			cfgPath := cfgPathParam.Get(tf)
-			cfgContent, err := os.ReadFile(cfgPath)
+			os.Chdir(filepath.Dir(cfgPath))
+			opts := readCfg(cfgPath)
 
-			if err != nil {
-				fmt.Printf("%+v\n", err)
-				os.Exit(1)
+			for _, o := range opts {
+				cp(o)
+
+				if prodParam.Get(tf) {
+					o.ESBuild.MinifyIdentifiers = true
+					o.ESBuild.MinifySyntax = true
+					o.ESBuild.MinifyWhitespace = true
+					o.ESBuild.Sourcemap = api.SourceMapNone
+				}
+
+				api.Build(o.ESBuild)
+				replace(o)
 			}
-
-			err = json.Unmarshal(cfgContent, &opts)
-			if err != nil {
-				fmt.Printf("%+v\n", err)
-				os.Exit(1)
-			}
-
-			cp(opts)
-
-			if prodParam.Get(tf) {
-				opts.ESBuild.MinifyIdentifiers = true
-				opts.ESBuild.MinifySyntax = true
-				opts.ESBuild.MinifyWhitespace = true
-				opts.ESBuild.Sourcemap = api.SourceMapNone
-			}
-
-			api.Build(opts.ESBuild)
-			replace(opts)
 		},
 	}
 
@@ -98,66 +118,90 @@ func main() {
 		Params: goyek.Params{cfgPathParam},
 		Action: func(tf *goyek.TF) {
 			cfgPath := cfgPathParam.Get(tf)
-			cfgContent, err := os.ReadFile(cfgPath)
-
-			if err != nil {
-				fmt.Printf("%+v\n", err)
-				os.Exit(1)
-			}
-
-			err = json.Unmarshal(cfgContent, &opts)
-			if err != nil {
-				fmt.Printf("%+v\n", err)
-				os.Exit(1)
-			}
+			os.Chdir(filepath.Dir(cfgPath))
+			optsSetups := readCfg(cfgPath)
 
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-			fmt.Println("Starting live reload server")
+			for i := range optsSetups {
+				opts := optsSetups[i]
 
-			go func() {
-				w := watcher.New()
-				w.SetMaxEvents(1)
-				w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
+				go func(opts options) {
+					w := watcher.New()
+					w.SetMaxEvents(1)
+					w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
 
-				if len(opts.Watch.Exclude) > 0 {
-					w.Ignore(opts.Watch.Exclude...)
+					if len(opts.Watch.Exclude) > 0 {
+						w.Ignore(opts.Watch.Exclude...)
+					}
+
+					if err := w.AddRecursive(opts.Watch.Path); err != nil {
+						fmt.Println(err.Error())
+						os.Exit(1)
+					}
+
+					go func() {
+						for {
+							select {
+							case event := <-w.Event:
+								fmt.Printf("File %s changed\n", event.Name())
+								cp(opts)
+								build(opts)
+								replace(opts)
+							case err := <-w.Error:
+								fmt.Println(err.Error())
+							case <-w.Closed:
+								return
+							}
+						}
+					}()
+
+					fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Path)
+
+					cp(opts)
+					build(opts)
+					replace(opts)
+
+					if err := w.Start(time.Millisecond * 100); err != nil {
+						fmt.Println(err.Error())
+					}
+				}(opts)
+
+				if opts.Serve.Path != "" {
+					go func() {
+						port := 8888
+						if opts.Serve.Port != 0 {
+							port = opts.Serve.Port
+						}
+
+						http.Handle("/", http.FileServer(http.Dir(opts.Serve.Path)))
+
+						fmt.Printf("Serving contents of %s at :%d\n", opts.Serve.Path, port)
+						err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+
+						if err != nil {
+							fmt.Printf("%+v\n", err.Error())
+							os.Exit(1)
+						}
+					}()
 				}
 
-				if err := w.AddRecursive(opts.Watch.Path); err != nil {
-					fmt.Println(err.Error())
-					os.Exit(1)
-				}
+				if opts.Link.From != "" {
+					reqBuildCh := link(opts.Link.From, opts.Link.To)
 
-				go func() {
-					for {
-						select {
-						case event := <-w.Event:
-							fmt.Printf("File %s changed\n", event.Name())
+					go func() {
+						for range reqBuildCh {
 							cp(opts)
 							build(opts)
 							replace(opts)
-						case err := <-w.Error:
-							fmt.Println(err.Error())
-						case <-w.Closed:
-							return
 						}
-					}
-				}()
-
-				fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Path)
-
-				cp(opts)
-				build(opts)
-				replace(opts)
-
-				if err := w.Start(time.Millisecond * 100); err != nil {
-					fmt.Println(err.Error())
+					}()
 				}
-			}()
+			}
 
 			go func() {
+				fmt.Println("Starting live reload server")
 				lr := lrserver.New(lrserver.DefaultName, lrserver.DefaultPort)
 
 				go func() {
@@ -173,25 +217,6 @@ func main() {
 					panic(err)
 				}
 			}()
-
-			if opts.Serve.Path != "" {
-				go func() {
-					port := 8888
-					if opts.Serve.Port != 0 {
-						port = opts.Serve.Port
-					}
-
-					http.Handle("/", http.FileServer(http.Dir(opts.Serve.Path)))
-
-					fmt.Printf("Serving contents of %s at :%d\n", opts.Serve.Path, port)
-					err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-
-					if err != nil {
-						fmt.Printf("%+v\n", err.Error())
-						os.Exit(1)
-					}
-				}()
-			}
 
 			<-c
 			fmt.Println("\nExit")
