@@ -5,19 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/goyek/goyek"
-	"github.com/jaschaephraim/lrserver"
 	"github.com/otiai10/copy"
-	"github.com/radovskyb/watcher"
+	"github.com/urfave/cli/v2"
 )
 
 var triggerReload = make(chan struct{})
@@ -73,160 +67,76 @@ func readCfg(cfgPath string) []options {
 }
 
 func main() {
-	flow := &goyek.Flow{}
+	cfgParam := &cli.StringFlag{
+		Name:  "c",
+		Value: "./.gowebbuild.json",
+		Usage: "path to config file config file.",
+	}
 
-	cfgPathParam := flow.RegisterStringParam(goyek.StringParam{
-		Name:    "c",
-		Usage:   "Path to config file config file.",
-		Default: "./.gowebbuild.json",
-	})
+	app := &cli.App{
+		Commands: []*cli.Command{
+			{
+				Name:  "build",
+				Usage: "build web sources one time and exit",
+				Flags: []cli.Flag{
+					cfgParam,
+					&cli.BoolFlag{
+						Name:  "p",
+						Value: false,
+						Usage: "use production ready build settings",
+					},
+				},
+				Action: buildAction,
+			},
 
-	prodParam := flow.RegisterBoolParam(goyek.BoolParam{
-		Name:    "p",
-		Usage:   "Use production ready build settings",
-		Default: false,
-	})
+			{
+				Name:  "watch",
+				Usage: "watch for changes and trigger the build",
+				Flags: []cli.Flag{
+					cfgParam,
+				},
+				Action: watchAction,
+			},
 
-	buildOnly := goyek.Task{
-		Name:   "build",
-		Usage:  "",
-		Params: goyek.Params{cfgPathParam, prodParam},
-		Action: func(tf *goyek.TF) {
-			cfgPath := cfgPathParam.Get(tf)
-			os.Chdir(filepath.Dir(cfgPath))
-			opts := readCfg(cfgPath)
+			{
+				Name:      "replace",
+				ArgsUsage: "[files] [search] [replace]",
+				Usage:     "replace text in files",
+				Action: func(ctx *cli.Context) error {
+					files := ctx.Args().Get(0)
+					searchStr := ctx.Args().Get(1)
+					replaceStr := ctx.Args().Get(2)
 
-			for _, o := range opts {
-				cp(o)
+					if files == "" {
+						return fmt.Errorf("invalid file pattern")
+					}
 
-				if prodParam.Get(tf) {
-					o.ESBuild.MinifyIdentifiers = true
-					o.ESBuild.MinifySyntax = true
-					o.ESBuild.MinifyWhitespace = true
-					o.ESBuild.Sourcemap = api.SourceMapNone
-				}
+					if searchStr == "" {
+						return fmt.Errorf("invalid search string")
+					}
 
-				api.Build(o.ESBuild)
-				replace(o)
-			}
+					replace(options{
+						Replace: []struct {
+							Pattern string
+							Search  string
+							Replace string
+						}{
+							{
+								Pattern: files,
+								Search:  searchStr,
+								Replace: replaceStr,
+							},
+						},
+					})
+					return nil
+				},
+			},
 		},
 	}
 
-	watch := goyek.Task{
-		Name:   "watch",
-		Usage:  "",
-		Params: goyek.Params{cfgPathParam},
-		Action: func(tf *goyek.TF) {
-			cfgPath := cfgPathParam.Get(tf)
-			os.Chdir(filepath.Dir(cfgPath))
-			optsSetups := readCfg(cfgPath)
-
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-			for i := range optsSetups {
-				opts := optsSetups[i]
-
-				go func(opts options) {
-					w := watcher.New()
-					w.SetMaxEvents(1)
-					w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
-
-					if len(opts.Watch.Exclude) > 0 {
-						w.Ignore(opts.Watch.Exclude...)
-					}
-
-					if err := w.AddRecursive(opts.Watch.Path); err != nil {
-						fmt.Println(err.Error())
-						os.Exit(1)
-					}
-
-					go func() {
-						for {
-							select {
-							case event := <-w.Event:
-								fmt.Printf("File %s changed\n", event.Name())
-								cp(opts)
-								build(opts)
-								replace(opts)
-							case err := <-w.Error:
-								fmt.Println(err.Error())
-							case <-w.Closed:
-								return
-							}
-						}
-					}()
-
-					fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Path)
-
-					cp(opts)
-					build(opts)
-					replace(opts)
-
-					if err := w.Start(time.Millisecond * 100); err != nil {
-						fmt.Println(err.Error())
-					}
-				}(opts)
-
-				if opts.Serve.Path != "" {
-					go func() {
-						port := 8888
-						if opts.Serve.Port != 0 {
-							port = opts.Serve.Port
-						}
-
-						http.Handle("/", http.FileServer(http.Dir(opts.Serve.Path)))
-
-						fmt.Printf("Serving contents of %s at :%d\n", opts.Serve.Path, port)
-						err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-
-						if err != nil {
-							fmt.Printf("%+v\n", err.Error())
-							os.Exit(1)
-						}
-					}()
-				}
-
-				if opts.Link.From != "" {
-					reqBuildCh := link(opts.Link.From, opts.Link.To)
-
-					go func() {
-						for range reqBuildCh {
-							cp(opts)
-							build(opts)
-							replace(opts)
-						}
-					}()
-				}
-			}
-
-			go func() {
-				fmt.Println("Starting live reload server")
-				lr := lrserver.New(lrserver.DefaultName, lrserver.DefaultPort)
-
-				go func() {
-					for {
-						<-triggerReload
-						lr.Reload("")
-					}
-				}()
-
-				lr.SetStatusLog(nil)
-				err := lr.ListenAndServe()
-				if err != nil {
-					panic(err)
-				}
-			}()
-
-			<-c
-			fmt.Println("\nExit")
-			os.Exit(0)
-		},
+	if err := app.Run(os.Args); err != nil {
+		fmt.Println(err)
 	}
-
-	flow.DefaultTask = flow.Register(watch)
-	flow.Register(buildOnly)
-	flow.Main()
 }
 
 func cp(opts options) {

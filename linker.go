@@ -32,9 +32,14 @@ func link(from, to string) chan struct{} {
 		name := gjson.Get(content, "name").String()
 
 		if deps[name] {
-			packages[name] = filepath.Dir(packageFiles[i])
+			pp, err := filepath.Abs(filepath.Dir(packageFiles[i]))
+			if err == nil {
+				packages[name] = pp
+			}
 		}
 	}
+
+	fmt.Printf("Found %d npm packages to monitor for changes.\n", len(packages))
 
 	go func() {
 		w := watcher.New()
