@@ -9,7 +9,12 @@ import (
 )
 
 func buildAction(ctx *cli.Context) error {
-	cfgPath := ctx.String("c")
+	cfgPath, err := filepath.Abs(ctx.String("c"))
+
+	if err != nil {
+		return err
+	}
+
 	os.Chdir(filepath.Dir(cfgPath))
 	opts := readCfg(cfgPath)
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/jaschaephraim/lrserver"
 	"github.com/otiai10/copy"
 	"github.com/urfave/cli/v2"
 )
@@ -94,6 +95,11 @@ func main() {
 				Usage: "watch for changes and trigger the build",
 				Flags: []cli.Flag{
 					cfgParam,
+					&cli.UintFlag{
+						Name:  "lr-port",
+						Value: uint(lrserver.DefaultPort),
+						Usage: "port for the live reload server",
+					},
 				},
 				Action: watchAction,
 			},
@@ -132,6 +138,7 @@ func main() {
 				},
 			},
 		},
+		DefaultCommand: "watch",
 	}
 
 	if err := app.Run(os.Args); err != nil {

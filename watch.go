@@ -15,7 +15,12 @@ import (
 )
 
 func watchAction(ctx *cli.Context) error {
-	cfgPath := ctx.String("c")
+	cfgPath, err := filepath.Abs(ctx.String("c"))
+
+	if err != nil {
+		return err
+	}
+
 	os.Chdir(filepath.Dir(cfgPath))
 	optsSetups := readCfg(cfgPath)
 
@@ -100,7 +105,8 @@ func watchAction(ctx *cli.Context) error {
 
 	go func() {
 		fmt.Println("Starting live reload server")
-		lr := lrserver.New(lrserver.DefaultName, lrserver.DefaultPort)
+		port := ctx.Uint("lr-port")
+		lr := lrserver.New(lrserver.DefaultName, uint16(port))
 
 		go func() {
 			for {
