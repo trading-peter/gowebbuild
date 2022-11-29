@@ -19,6 +19,7 @@ func buildAction(ctx *cli.Context) error {
 	opts := readCfg(cfgPath)
 
 	for _, o := range opts {
+		purge(o)
 		cp(o)
 
 		if ctx.Bool("p") {
@@ -28,7 +29,7 @@ func buildAction(ctx *cli.Context) error {
 			o.ESBuild.Sourcemap = api.SourceMapNone
 		}
 
-		api.Build(o.ESBuild)
+		api.Build(o.ESBuild.BuildOptions)
 		replace(o)
 	}
 

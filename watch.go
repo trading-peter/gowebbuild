@@ -49,6 +49,7 @@ func watchAction(ctx *cli.Context) error {
 					select {
 					case event := <-w.Event:
 						fmt.Printf("File %s changed\n", event.Name())
+						purge(opts)
 						cp(opts)
 						build(opts)
 						replace(opts)

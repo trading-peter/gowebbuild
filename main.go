@@ -17,8 +17,13 @@ import (
 
 var triggerReload = make(chan struct{})
 
+type ESBuildExtended struct {
+	api.BuildOptions
+	PurgeBeforeBuild bool
+}
+
 type options struct {
-	ESBuild api.BuildOptions
+	ESBuild ESBuildExtended
 	Watch   struct {
 		Path    string
 		Exclude []string
@@ -75,6 +80,28 @@ func main() {
 	}
 
 	app := &cli.App{
+		Name:    "gowebbuild",
+		Usage:   "All in one tool to build web frontend projects.",
+		Version: "4.1.0",
+		Authors: []*cli.Author{{
+			Name: "trading-peter (https://github.com/trading-peter)",
+		}},
+		UsageText: `gowebbuild [global options] command [command options] [arguments...]
+
+Examples:
+
+Watch project and rebuild if a files changes:
+$ gowebbuild
+
+Use a different name or path for the config file (working directory is always the location of the config file):
+$ gowebbuild -c watch
+
+Production build:
+$ gowebbuild build -p
+
+Manually replace a string within some files (not limited to project directory):
+$ gowebbuild replace *.go foo bar
+`,
 		Commands: []*cli.Command{
 			{
 				Name:  "build",
@@ -106,7 +133,7 @@ func main() {
 
 			{
 				Name:      "replace",
-				ArgsUsage: "[files] [search] [replace]",
+				ArgsUsage: "[glob file pattern] [search] [replace]",
 				Usage:     "replace text in files",
 				Action: func(ctx *cli.Context) error {
 					files := ctx.Args().Get(0)
@@ -143,6 +170,18 @@ func main() {
 
 	if err := app.Run(os.Args); err != nil {
 		fmt.Println(err)
+	}
+}
+
+func purge(opts options) {
+	if opts.ESBuild.PurgeBeforeBuild {
+		if opts.ESBuild.Outdir != "" {
+			os.RemoveAll(opts.ESBuild.Outdir)
+		}
+
+		if opts.ESBuild.Outfile != "" {
+			os.Remove(opts.ESBuild.Outfile)
+		}
 	}
 }
 
@@ -242,7 +281,7 @@ func isDir(path string) bool {
 }
 
 func build(opts options) {
-	result := api.Build(opts.ESBuild)
+	result := api.Build(opts.ESBuild.BuildOptions)
 
 	if len(result.Errors) == 0 {
 		triggerReload <- struct{}{}
