@@ -45,6 +45,7 @@ func link(from, to string) chan struct{} {
 		w := watcher.New()
 		w.SetMaxEvents(1)
 		w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
+		w.IgnoreHiddenFiles(true)
 
 		if err := w.AddRecursive(from); err != nil {
 			fmt.Println(err.Error())
