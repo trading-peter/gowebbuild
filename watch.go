@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -63,6 +62,7 @@ func watchAction(ctx *cli.Context) error {
 
 			fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Path)
 
+			purge(opts)
 			cp(opts)
 			build(opts)
 			replace(opts)
@@ -74,15 +74,12 @@ func watchAction(ctx *cli.Context) error {
 
 		if opts.Serve.Path != "" {
 			go func() {
-				port := 8888
+				port := 8080
 				if opts.Serve.Port != 0 {
 					port = opts.Serve.Port
 				}
 
-				http.Handle("/", http.FileServer(http.Dir(opts.Serve.Path)))
-
-				fmt.Printf("Serving contents of %s at :%d\n", opts.Serve.Path, port)
-				err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+				err := Serve(opts.Serve.Path, uint(port))
 
 				if err != nil {
 					fmt.Printf("%+v\n", err.Error())

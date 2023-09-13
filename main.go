@@ -4,14 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/jaschaephraim/lrserver"
 	"github.com/otiai10/copy"
+	"github.com/radovskyb/watcher"
 	"github.com/urfave/cli/v2"
 )
 
@@ -34,6 +37,10 @@ type options struct {
 	}
 	Copy []struct {
 		Src  string
+		Dest string
+	}
+	Download []struct {
+		Url  string
 		Dest string
 	}
 	Replace []struct {
@@ -82,7 +89,7 @@ func main() {
 	app := &cli.App{
 		Name:    "gowebbuild",
 		Usage:   "All in one tool to build web frontend projects.",
-		Version: "4.1.1",
+		Version: "4.3.0",
 		Authors: []*cli.Author{{
 			Name: "trading-peter (https://github.com/trading-peter)",
 		}},
@@ -132,6 +139,106 @@ $ gowebbuild replace *.go foo bar
 			},
 
 			{
+				Name:  "serve",
+				Usage: "serve a directory with a simply http server",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "root",
+						Value: "./",
+						Usage: "folder to serve",
+					},
+					&cli.UintFlag{
+						Name:  "port",
+						Value: uint(8080),
+						Usage: "serve directory this on port",
+					},
+					&cli.UintFlag{
+						Name:  "lr-port",
+						Value: uint(lrserver.DefaultPort),
+						Usage: "port for the live reload server",
+					},
+				},
+				Action: func(ctx *cli.Context) error {
+					port := ctx.Uint("port")
+					root := ctx.String("root")
+					lrPort := ctx.Uint("lr-port")
+
+					if lrPort != 0 {
+						go func() {
+							w := watcher.New()
+							w.SetMaxEvents(1)
+							w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
+
+							if err := w.AddRecursive(root); err != nil {
+								fmt.Println(err.Error())
+								os.Exit(1)
+							}
+
+							go func() {
+								for {
+									select {
+									case event := <-w.Event:
+										fmt.Printf("File %s changed\n", event.Name())
+										triggerReload <- struct{}{}
+									case err := <-w.Error:
+										fmt.Println(err.Error())
+									case <-w.Closed:
+										return
+									}
+								}
+							}()
+
+							if err := w.Start(time.Millisecond * 100); err != nil {
+								fmt.Println(err.Error())
+							}
+						}()
+
+						go func() {
+							lr := lrserver.New(lrserver.DefaultName, uint16(lrPort))
+
+							go func() {
+								for {
+									<-triggerReload
+									lr.Reload("")
+								}
+							}()
+
+							lr.SetStatusLog(nil)
+							err := lr.ListenAndServe()
+							if err != nil {
+								panic(err)
+							}
+						}()
+					}
+
+					return Serve(root, port)
+				},
+			},
+
+			{
+				Name:  "download",
+				Usage: "execute downloads as configured",
+				Flags: []cli.Flag{
+					cfgParam,
+				},
+				Action: func(ctx *cli.Context) error {
+					cfgPath, err := filepath.Abs(ctx.String("c"))
+
+					if err != nil {
+						return err
+					}
+
+					os.Chdir(filepath.Dir(cfgPath))
+					opts := readCfg(cfgPath)
+
+					for i := range opts {
+						download(opts[i])
+					}
+					return nil
+				},
+			},
+
+			{
 				Name:      "replace",
 				ArgsUsage: "[glob file pattern] [search] [replace]",
 				Usage:     "replace text in files",
@@ -176,11 +283,54 @@ $ gowebbuild replace *.go foo bar
 func purge(opts options) {
 	if opts.ESBuild.PurgeBeforeBuild {
 		if opts.ESBuild.Outdir != "" {
+			fmt.Printf("Purging output folder %s\n", opts.ESBuild.Outdir)
 			os.RemoveAll(opts.ESBuild.Outdir)
 		}
 
 		if opts.ESBuild.Outfile != "" {
+			fmt.Printf("Purging output file %s\n", opts.ESBuild.Outfile)
 			os.Remove(opts.ESBuild.Outfile)
+		}
+	}
+}
+
+func download(opts options) {
+	if len(opts.Download) == 0 {
+		return
+	}
+
+	for _, dl := range opts.Download {
+		if !isDir(filepath.Dir(dl.Dest)) {
+			fmt.Printf("Failed to find destination folder for downloading from %s\n", dl.Url)
+			continue
+		}
+
+		file, err := os.Create(dl.Dest)
+		if err != nil {
+			fmt.Printf("Failed to create file for downloading from %s: %v\n", dl.Url, err)
+			continue
+		}
+		defer file.Close()
+
+		client := http.Client{
+			CheckRedirect: func(r *http.Request, via []*http.Request) error {
+				r.URL.Opaque = r.URL.Path
+				return nil
+			},
+		}
+
+		fmt.Printf("Downloading %s to %s\n", dl.Url, dl.Dest)
+		resp, err := client.Get(dl.Url)
+		if err != nil {
+			fmt.Printf("Failed to download file from %s: %v\n", dl.Url, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		_, err = io.Copy(file, resp.Body)
+		if err != nil {
+			fmt.Printf("Failed to write file downloaded from %s: %v\n", dl.Url, err)
+			continue
 		}
 	}
 }
@@ -190,6 +340,7 @@ func cp(opts options) {
 		fmt.Println("Nothing to copy")
 		return
 	}
+
 	for _, op := range opts.Copy {
 		paths, err := filepath.Glob(op.Src)
 		if err != nil {
@@ -232,7 +383,7 @@ func replace(opts options) {
 				continue
 			}
 
-			read, err := ioutil.ReadFile(p)
+			read, err := os.ReadFile(p)
 			if err != nil {
 				fmt.Printf("%+v\n", err)
 				os.Exit(1)
@@ -248,7 +399,7 @@ func replace(opts options) {
 			if count > 0 {
 				fmt.Printf("Replacing %d occurrences of '%s' with '%s' in %s\n", count, op.Search, r, p)
 				newContents := strings.ReplaceAll(string(read), op.Search, r)
-				err = ioutil.WriteFile(p, []byte(newContents), 0)
+				err = os.WriteFile(p, []byte(newContents), 0)
 
 				if err != nil {
 					fmt.Printf("%+v\n", err)

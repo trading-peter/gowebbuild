@@ -19,6 +19,9 @@ func buildAction(ctx *cli.Context) error {
 	opts := readCfg(cfgPath)
 
 	for _, o := range opts {
+		if ctx.Bool("p") {
+			download(o)
+		}
 		purge(o)
 		cp(o)
 

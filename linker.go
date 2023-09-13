@@ -63,9 +63,8 @@ func link(from, to string) chan struct{} {
 							dest := filepath.Join(to, "node_modules", k)
 							fmt.Printf("Copying %s to %s\n", src, dest)
 							err := copy.Copy(src, dest, copy.Options{
-								Skip: func(src string) (bool, error) {
-									ok, _ := filepath.Match("*.js", filepath.Base(src))
-									if ok && !strings.Contains(src, "node_modules") {
+								Skip: func(stat fs.FileInfo, src, dest string) (bool, error) {
+									if !isExcludedPath(src, "node_modules", ".git") && (stat.IsDir() || isIncludedExt(filepath.Base(src), "*.js", "*.ts")) {
 										return false, nil
 									}
 
@@ -97,6 +96,25 @@ func link(from, to string) chan struct{} {
 	}()
 
 	return requestBuildCh
+}
+
+func isExcludedPath(srcPath string, exPaths ...string) bool {
+	for _, exP := range exPaths {
+		if strings.Contains(srcPath, exP) {
+			return true
+		}
+	}
+	return false
+}
+
+func isIncludedExt(srcPath string, extensions ...string) bool {
+	for _, ext := range extensions {
+		if ok, _ := filepath.Match(ext, srcPath); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func findFiles(root, name string) []string {
