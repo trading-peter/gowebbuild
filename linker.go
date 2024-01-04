@@ -60,7 +60,8 @@ func link(from, to string) chan struct{} {
 					for k, v := range packages {
 						if strings.HasPrefix(event.Path, v) {
 							src := filepath.Dir(event.Path)
-							dest := filepath.Join(to, "node_modules", k)
+							subPath, _ := filepath.Rel(v, src)
+							dest := filepath.Join(to, "node_modules", k, subPath)
 							fmt.Printf("Copying %s to %s\n", src, dest)
 							err := copy.Copy(src, dest, copy.Options{
 								Skip: func(stat fs.FileInfo, src, dest string) (bool, error) {
