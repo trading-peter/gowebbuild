@@ -38,9 +38,15 @@ func watchAction(ctx *cli.Context) error {
 				w.Ignore(opts.Watch.Exclude...)
 			}
 
-			if err := w.AddRecursive(opts.Watch.Path); err != nil {
-				fmt.Println(err.Error())
-				os.Exit(1)
+			if opts.ESBuild.Outdir != "" {
+				w.Ignore(opts.ESBuild.Outdir)
+			}
+
+			for _, p := range opts.Watch.Paths {
+				if err := w.AddRecursive(p); err != nil {
+					fmt.Println(err.Error())
+					os.Exit(1)
+				}
 			}
 
 			go func() {
@@ -60,7 +66,7 @@ func watchAction(ctx *cli.Context) error {
 				}
 			}()
 
-			fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Path)
+			fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Paths)
 
 			purge(opts)
 			cp(opts)

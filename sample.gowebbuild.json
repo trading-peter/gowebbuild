@@ -1,6 +1,6 @@
 {
   "Watch": {
-    "Path": "./frontend/src",
+    "Paths": [ "./frontend/src" ],
     "Exclude": [ "./dist" ]
   },
   "Copy": [
@@ -45,5 +45,8 @@
     "Bundle":    true,
     "Write":     true,
     "LogLevel":  3
+  },
+  "ProductionBuildOptions": {
+    "CmdPostBuild": "my-build-script.sh"
   }
 }

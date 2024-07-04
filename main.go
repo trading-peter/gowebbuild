@@ -28,7 +28,7 @@ type ESBuildExtended struct {
 type options struct {
 	ESBuild ESBuildExtended
 	Watch   struct {
-		Path    string
+		Paths   []string
 		Exclude []string
 	}
 	Serve struct {
@@ -51,6 +51,9 @@ type options struct {
 	Link struct {
 		From string
 		To   string
+	}
+	ProductionBuildOptions struct {
+		CmdPostBuild string
 	}
 }
 
@@ -89,7 +92,7 @@ func main() {
 	app := &cli.App{
 		Name:    "gowebbuild",
 		Usage:   "All in one tool to build web frontend projects.",
-		Version: "4.3.1",
+		Version: "4.4.0",
 		Authors: []*cli.Author{{
 			Name: "trading-peter (https://github.com/trading-peter)",
 		}},
