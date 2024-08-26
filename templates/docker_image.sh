@@ -13,6 +13,7 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o ../{{.ProjectFolderName}} .
 
 # A second run is needed to build the final image.
 cd ..
-docker build -f sources/Dockerfile --no-cache -t {{.GoModuleName}}:${ver} .
+docker build -f sources/Dockerfile --no-cache -t {{.GoModuleName}}:${ver} -t {{.GoModuleName}}:latest .
 docker push {{.GoModuleName}}:${ver}
+docker push {{.GoModuleName}}:latest
 rm -rf sources {{.ProjectFolderName}}
