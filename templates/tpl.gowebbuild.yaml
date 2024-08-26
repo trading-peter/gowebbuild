@@ -1,0 +1,34 @@
+- esbuild:
+    entryPoints:
+        - frontend/the-app.js
+    outdir: ./frontend-dist
+    sourcemap: 1
+    format: 3
+    splitting: true
+    platform: 0
+    bundle: true
+    write: true
+    logLevel: 3
+    purgeBeforeBuild: false
+  watch:
+    paths:
+        - ./frontend/src
+    exclude: []
+  # serve:  # Uncomment and set a path to enable
+  #   path: ""
+  #   port: 8080
+  copy:
+    - src: ./frontend/index.html
+      dest: ./frontend-dist
+  # download:
+    # - url: https://example.com/some-file-or-asset.js
+    #   dest: ./frontend/src/vendor/some-file-or-asset.js
+  # replace:
+  #   - pattern: "*.go|*.js|*.html"
+  #     search: "Something"
+  #     replace: "This"
+  # link:
+  #   from: ../../web/tp-elements
+  #   to: ./frontend
+  # productionBuildOptions:
+  #   cmdPostBuild: ""

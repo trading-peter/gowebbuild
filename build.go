@@ -27,14 +27,16 @@ func buildAction(ctx *cli.Context) error {
 		purge(o)
 		cp(o)
 
+		esBuildCfg := cfgToESBuildCfg(o)
+
 		if ctx.Bool("p") {
-			o.ESBuild.MinifyIdentifiers = true
-			o.ESBuild.MinifySyntax = true
-			o.ESBuild.MinifyWhitespace = true
-			o.ESBuild.Sourcemap = api.SourceMapNone
+			esBuildCfg.MinifyIdentifiers = true
+			esBuildCfg.MinifySyntax = true
+			esBuildCfg.MinifyWhitespace = true
+			esBuildCfg.Sourcemap = api.SourceMapNone
 		}
 
-		api.Build(o.ESBuild.BuildOptions)
+		api.Build(esBuildCfg)
 		replace(o)
 
 		if ctx.Bool("p") && o.ProductionBuildOptions.CmdPostBuild != "" {
