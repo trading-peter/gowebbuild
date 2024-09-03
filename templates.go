@@ -33,7 +33,7 @@ var qs = []*survey.Question{
 		Name: "tpl",
 		Prompt: &survey.Select{
 			Message: "Choose a template:",
-			Options: []string{".gowebbuild.yaml", "docker_image.sh", "Dockerfile"},
+			Options: []string{".air.toml", ".gowebbuild.yaml", "docker_image.sh", "Dockerfile"},
 			Default: "docker_image.sh",
 		},
 	},
