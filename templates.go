@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"text/template"
 
 	"github.com/Iilun/survey/v2"
@@ -20,6 +21,12 @@ var dockerImage string
 
 //go:embed templates/Dockerfile
 var dockerFile string
+
+//go:embed templates/.air.toml
+var airToml string
+
+//go:embed templates/.air.win.toml
+var airWinToml string
 
 var qs = []*survey.Question{
 	{
@@ -63,6 +70,12 @@ func tplAction(ctx *cli.Context) error {
 	case "Dockerfile":
 		tpl = dockerFile
 		fileName = "Dockerfile"
+	case "air.toml":
+		tpl = airToml
+		if runtime.GOOS == "windows" {
+			tpl = airWinToml
+		}
+		fileName = ".air.toml"
 	default:
 		golog.Fatal("Invalid template")
 	}
