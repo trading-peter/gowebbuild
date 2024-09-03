@@ -70,7 +70,7 @@ func tplAction(ctx *cli.Context) error {
 	case "Dockerfile":
 		tpl = dockerFile
 		fileName = "Dockerfile"
-	case "air.toml":
+	case ".air.toml":
 		tpl = airToml
 		if runtime.GOOS == "windows" {
 			tpl = airWinToml
