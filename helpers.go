@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/otiai10/copy"
+	"github.com/trading-peter/gowebbuild/fsutils"
 )
 
 func purge(opts options) {
@@ -34,7 +35,7 @@ func download(opts options) {
 	}
 
 	for _, dl := range opts.Download {
-		if !isDir(filepath.Dir(dl.Dest)) {
+		if !fsutils.IsDir(filepath.Dir(dl.Dest)) {
 			fmt.Printf("Failed to find destination folder for downloading from %s\n", dl.Url)
 			continue
 		}
@@ -82,11 +83,11 @@ func cp(opts options) {
 			continue
 		}
 
-		destIsDir := isDir(op.Dest)
+		destIsDir := fsutils.IsDir(op.Dest)
 		for _, p := range paths {
 			d := op.Dest
 
-			if destIsDir && isFile(p) {
+			if destIsDir && fsutils.IsFile(p) {
 				d = filepath.Join(d, filepath.Base(p))
 			}
 			err := copy.Copy(p, d)
@@ -113,7 +114,7 @@ func replace(opts options) {
 		}
 
 		for _, p := range paths {
-			if !isFile(p) {
+			if !fsutils.IsFile(p) {
 				continue
 			}
 
@@ -144,27 +145,6 @@ func replace(opts options) {
 	}
 }
 
-func isFile(path string) bool {
-	stat, err := os.Stat(path)
-
-	if errors.Is(err, os.ErrNotExist) {
-		return false
-	}
-
-	return !stat.IsDir()
-}
-
-func isDir(path string) bool {
-	stat, err := os.Stat(path)
-
-	if errors.Is(err, os.ErrNotExist) {
-		os.MkdirAll(path, 0755)
-		return true
-	}
-
-	return err == nil && stat.IsDir()
-}
-
 func build(opts options) {
 	result := api.Build(cfgToESBuildCfg(opts))
 
@@ -176,7 +156,7 @@ func build(opts options) {
 func getGoModuleName(root string) (string, error) {
 	modFile := filepath.Join(root, "go.mod")
 
-	if !isFile(modFile) {
+	if !fsutils.IsFile(modFile) {
 		return "", fmt.Errorf("go.mod file not found")
 	}
 
@@ -207,4 +187,29 @@ func getGoModuleName(root string) (string, error) {
 	}
 
 	return "", nil
+}
+
+func findFreePort(from, to int) int {
+	for port := from; port <= to; port++ {
+		if isFreePort(port) {
+			return port
+		}
+		port++
+	}
+
+	return -1
+}
+
+func isFreePort(port int) bool {
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("localhost:%d", port))
+	if err != nil {
+		return false
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return false
+	}
+	defer l.Close()
+	return true
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Iilun/survey/v2"
 	"github.com/kataras/golog"
+	"github.com/trading-peter/gowebbuild/fsutils"
 	"github.com/urfave/cli/v2"
 )
 
@@ -80,7 +81,7 @@ func tplAction(ctx *cli.Context) error {
 		golog.Fatal("Invalid template")
 	}
 
-	if isFile(fileName) {
+	if fsutils.IsFile(fileName) {
 		fmt.Printf("File \"%s\" already exists.\n", fileName)
 		return nil
 	}

@@ -40,16 +40,18 @@ func buildAction(ctx *cli.Context) error {
 		replace(o)
 
 		if ctx.Bool("p") && o.ProductionBuildOptions.CmdPostBuild != "" {
-			fmt.Printf("Executing post production build command `%s`\n", o.ProductionBuildOptions.CmdPostBuild)
-			cmd := exec.Command("sh", "-c", o.ProductionBuildOptions.CmdPostBuild)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
+			defer func() {
+				fmt.Printf("Executing post production build command `%s`\n", o.ProductionBuildOptions.CmdPostBuild)
+				cmd := exec.Command("sh", "-c", o.ProductionBuildOptions.CmdPostBuild)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err := cmd.Run()
 
-			if err != nil {
-				fmt.Printf("Failed to execute post production build command `%s`: %+v\n", o.ProductionBuildOptions.CmdPostBuild, err)
-				os.Exit(1)
-			}
+				if err != nil {
+					fmt.Printf("Failed to execute post production build command `%s`: %+v\n", o.ProductionBuildOptions.CmdPostBuild, err)
+					os.Exit(1)
+				}
+			}()
 		}
 	}
 

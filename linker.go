@@ -11,6 +11,7 @@ import (
 	"github.com/otiai10/copy"
 	"github.com/radovskyb/watcher"
 	"github.com/tidwall/gjson"
+	"github.com/trading-peter/gowebbuild/fsutils"
 )
 
 func link(from, to string) chan struct{} {
@@ -25,7 +26,7 @@ func link(from, to string) chan struct{} {
 	}
 
 	packages := map[string]string{}
-	packageFiles := findFiles(from, "package.json")
+	packageFiles := fsutils.FindFiles(from, "package.json")
 
 	for i := range packageFiles {
 		content := readFileContent(packageFiles[i])
@@ -116,24 +117,6 @@ func isIncludedExt(srcPath string, extensions ...string) bool {
 	}
 
 	return false
-}
-
-func findFiles(root, name string) []string {
-	paths := []string{}
-
-	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if !d.IsDir() && filepath.Base(path) == name && !strings.Contains(path, "node_modules") {
-			paths = append(paths, path)
-		}
-
-		return nil
-	})
-
-	return paths
 }
 
 func readFileContent(path string) string {

@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/jaschaephraim/lrserver"
@@ -22,9 +20,6 @@ func watchAction(ctx *cli.Context) error {
 
 	os.Chdir(filepath.Dir(cfgPath))
 	optsSetups := readCfg(cfgPath)
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	for i := range optsSetups {
 		opts := optsSetups[i]
@@ -108,7 +103,7 @@ func watchAction(ctx *cli.Context) error {
 	}
 
 	go func() {
-		fmt.Println("Starting live reload server")
+		fmt.Println("Starting live reload server.")
 		port := ctx.Uint("lr-port")
 		lr := lrserver.New(lrserver.DefaultName, uint16(port))
 
@@ -126,8 +121,9 @@ func watchAction(ctx *cli.Context) error {
 		}
 	}()
 
-	<-c
-	fmt.Println("\nStopped watching")
+	runProxy(ctx.Context, filepath.Dir(cfgPath), optsSetups)
+	<-ctx.Done()
+	fmt.Println("Stopped watching.")
 
 	return nil
 }

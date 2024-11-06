@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/jaschaephraim/lrserver"
@@ -23,7 +26,7 @@ func main() {
 	app := &cli.App{
 		Name:    "gowebbuild",
 		Usage:   "All in one tool to build web frontend projects.",
-		Version: "6.1.2",
+		Version: "6.1.3",
 		Authors: []*cli.Author{{
 			Name: "trading-peter (https://github.com/trading-peter)",
 		}},
@@ -52,6 +55,16 @@ $ gowebbuild replace *.go foo bar
 				},
 				Action: tplAction,
 			},
+
+			{
+				Name:  "npm-proxy",
+				Usage: "proxy npm packages",
+				Flags: []cli.Flag{
+					cfgParam,
+				},
+				Action: proxyAction,
+			},
+
 			{
 				Name:  "build",
 				Usage: "build web sources one time and exit",
@@ -217,7 +230,17 @@ $ gowebbuild replace *.go foo bar
 		DefaultCommand: "watch",
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	appCtx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		<-sigChan
+		cancel()
+		fmt.Println("Received interrupt, shutting down...")
+	}()
+
+	if err := app.RunContext(appCtx, os.Args); err != nil {
 		fmt.Println(err)
 	}
 }

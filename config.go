@@ -68,6 +68,15 @@ type options struct {
 	ProductionBuildOptions struct {
 		CmdPostBuild string `yaml:"cmdPostBuild"`
 	} `yaml:"productionBuildOptions"`
+	NpmProxy struct {
+		Overrides []NpmProxyOverride
+	} `yaml:"npm_proxy"`
+}
+
+type NpmProxyOverride struct {
+	Namespace   string `yaml:"namespace"`
+	Upstream    string `yaml:"upstream"`
+	PackageRoot string `yaml:"packageRoot"`
 }
 
 func readCfg(cfgPath string) []options {
