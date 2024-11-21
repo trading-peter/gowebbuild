@@ -7,15 +7,12 @@ import (
 	"path/filepath"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/trading-peter/gowebbuild/fsutils"
 	"github.com/urfave/cli/v2"
 )
 
 func buildAction(ctx *cli.Context) error {
-	cfgPath, err := filepath.Abs(ctx.String("c"))
-
-	if err != nil {
-		return err
-	}
+	cfgPath := fsutils.ResolvePath(ctx.String("c"))
 
 	os.Chdir(filepath.Dir(cfgPath))
 	opts := readCfg(cfgPath)

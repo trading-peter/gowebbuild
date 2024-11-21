@@ -2,6 +2,7 @@ package fsutils
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -45,4 +46,30 @@ func IsDir(path string) bool {
 	}
 
 	return err == nil && stat.IsDir()
+}
+
+func ResolvePath(path string) string {
+	// We assume that the user doesn't use the involved feature if the path is empty.
+	if path == "" {
+		return ""
+	}
+
+	expandedPath := os.ExpandEnv(path)
+
+	if strings.HasPrefix(expandedPath, "~") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+		expandedPath = filepath.Join(homeDir, expandedPath[1:])
+	}
+
+	path, err := filepath.Abs(expandedPath)
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+
+	return path
 }

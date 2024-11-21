@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/trading-peter/gowebbuild/fsutils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -121,6 +122,11 @@ func readCfg(cfgPath string) []options {
 		optsSetups = append(optsSetups, opt)
 	}
 
+	// Process all paths in each options setup
+	for i := range optsSetups {
+		processPaths(&optsSetups[i])
+	}
+
 	return optsSetups
 }
 
@@ -147,4 +153,44 @@ func readJsonCfg(cfgPath string) []options {
 	}
 
 	return optsSetups
+}
+
+func processPaths(opts *options) {
+	// ESBuild paths
+	for i, entry := range opts.ESBuild.EntryPoints {
+		opts.ESBuild.EntryPoints[i] = fsutils.ResolvePath(entry)
+	}
+	opts.ESBuild.Outdir = fsutils.ResolvePath(opts.ESBuild.Outdir)
+	opts.ESBuild.Outfile = fsutils.ResolvePath(opts.ESBuild.Outfile)
+
+	// Watch paths
+	for i, path := range opts.Watch.Paths {
+		opts.Watch.Paths[i] = fsutils.ResolvePath(path)
+	}
+	for i, path := range opts.Watch.Exclude {
+		opts.Watch.Exclude[i] = fsutils.ResolvePath(path)
+	}
+
+	// Serve path
+	opts.Serve.Path = fsutils.ResolvePath(opts.Serve.Path)
+
+	// Copy paths
+	for i := range opts.Copy {
+		opts.Copy[i].Src = fsutils.ResolvePath(opts.Copy[i].Src)
+		opts.Copy[i].Dest = fsutils.ResolvePath(opts.Copy[i].Dest)
+	}
+
+	// Download paths
+	for i := range opts.Download {
+		opts.Download[i].Dest = fsutils.ResolvePath(opts.Download[i].Dest)
+	}
+
+	// Link paths
+	opts.Link.From = fsutils.ResolvePath(opts.Link.From)
+	opts.Link.To = fsutils.ResolvePath(opts.Link.To)
+
+	// Npm proxy paths
+	for i := range opts.NpmProxy.Overrides {
+		opts.NpmProxy.Overrides[i].PackageRoot = fsutils.ResolvePath(opts.NpmProxy.Overrides[i].PackageRoot)
+	}
 }
