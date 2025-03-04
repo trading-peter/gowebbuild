@@ -21,6 +21,14 @@ func watchAction(ctx *cli.Context) error {
 	os.Chdir(filepath.Dir(cfgPath))
 	optsSetups := readCfg(cfgPath)
 
+	pipeline := func(opts options) {
+		purge(opts)
+		cp(opts)
+		build(opts)
+		injectLR(opts)
+		replace(opts)
+	}
+
 	for i := range optsSetups {
 		opts := optsSetups[i]
 
@@ -49,10 +57,7 @@ func watchAction(ctx *cli.Context) error {
 					select {
 					case event := <-w.Event:
 						fmt.Printf("File %s changed\n", event.Name())
-						purge(opts)
-						cp(opts)
-						build(opts)
-						replace(opts)
+						pipeline(opts)
 					case err := <-w.Error:
 						fmt.Println(err.Error())
 					case <-w.Closed:
@@ -63,10 +68,7 @@ func watchAction(ctx *cli.Context) error {
 
 			fmt.Printf("Watching %d elements in %s\n", len(w.WatchedFiles()), opts.Watch.Paths)
 
-			purge(opts)
-			cp(opts)
-			build(opts)
-			replace(opts)
+			pipeline(opts)
 
 			if err := w.Start(time.Millisecond * 100); err != nil {
 				fmt.Println(err.Error())

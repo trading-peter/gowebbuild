@@ -145,13 +145,83 @@ func replace(opts options) {
 	}
 }
 
+func injectLR(opts options) {
+	if opts.Watch.InjectLiveReload == "" {
+		return
+	}
+
+	// Read the HTML file
+	contents, err := os.ReadFile(opts.Watch.InjectLiveReload)
+	if err != nil {
+		fmt.Printf("Failed to read inject live reload script: %v\n", err)
+		return
+	}
+
+	htmlContent := string(contents)
+	scriptTag := `<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' localhost:35729;" /><script src="http://localhost:35729/livereload.js"></script>`
+
+	// Check if head tag exists and inject script reference
+	if strings.Contains(htmlContent, "</head>") && !strings.Contains(htmlContent, "livereload.js") {
+		newContent := strings.Replace(
+			htmlContent,
+			"<head>",
+			"<head>"+scriptTag+"\n",
+			1,
+		)
+
+		err = os.WriteFile(opts.Watch.InjectLiveReload, []byte(newContent), 0644)
+		if err != nil {
+			fmt.Printf("Failed to write live reload script reference: %v\n", err)
+			return
+		}
+		fmt.Printf("Injected live reload script reference into %s\n", opts.Watch.InjectLiveReload)
+	} else {
+		fmt.Printf("No </head> tag found or livereload.js already injected in %s\n", opts.Watch.InjectLiveReload)
+	}
+}
+
 func build(opts options) {
-	result := api.Build(cfgToESBuildCfg(opts))
+	esBuildOpts := cfgToESBuildCfg(opts)
+	result := api.Build(esBuildOpts)
 
 	if len(result.Errors) == 0 {
 		triggerReload <- struct{}{}
 	}
 }
+
+// func createHTMLInjectionPlugin(scriptContent string) api.Plugin {
+// 	return api.Plugin{
+// 		Name: "html-injector",
+// 		Setup: func(build api.PluginBuild) {
+// 			build.OnLoad(api.OnLoadOptions{Filter: `\.html$`}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+// 				contents, err := os.ReadFile(args.Path)
+// 				if err != nil {
+// 					return api.OnLoadResult{}, err
+// 				}
+
+// 				htmlContent := string(contents)
+
+// 				// Create script tag with content
+// 				scriptTag := "<script>" + scriptContent + "</script>"
+
+// 				// Insert script tag before </head>
+// 				if strings.Contains(htmlContent, "</head>") {
+// 					htmlContent = strings.Replace(
+// 						htmlContent,
+// 						"</head>",
+// 						scriptTag+"</head>",
+// 						1,
+// 					)
+// 				}
+
+// 				return api.OnLoadResult{
+// 					Contents: &htmlContent,
+// 					Loader:   api.LoaderText, // or api.LoaderFile
+// 				}, nil
+// 			})
+// 		},
+// 	}
+// }
 
 func getGoModuleName(root string) (string, error) {
 	modFile := filepath.Join(root, "go.mod")

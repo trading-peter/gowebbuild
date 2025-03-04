@@ -14,7 +14,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/kataras/golog"
-	"github.com/mholt/archiver/v4"
+	"github.com/mholt/archives"
 	"github.com/trading-peter/gowebbuild/fsutils"
 )
 
@@ -114,7 +114,7 @@ func (p *Proxy) createPackage(pkgPath string, pkg PackageJson) (string, error) {
 
 	pkgArchive := filepath.Join(p.pkgCachePath, sanitizePkgName(pkg.Name, pkg.Version)+".tar")
 
-	files, err := archiver.FilesFromDisk(nil, map[string]string{
+	files, err := archives.FilesFromDisk(context.TODO(), nil, map[string]string{
 		pkgPath: ".",
 	})
 
@@ -122,7 +122,7 @@ func (p *Proxy) createPackage(pkgPath string, pkg PackageJson) (string, error) {
 		return "", err
 	}
 
-	filesFiltered := []archiver.File{}
+	filesFiltered := []archives.FileInfo{}
 
 	filterRegex := regexp.MustCompile(`^node_modules|.git`)
 
@@ -139,8 +139,8 @@ func (p *Proxy) createPackage(pkgPath string, pkg PackageJson) (string, error) {
 	}
 	defer out.Close()
 
-	format := archiver.CompressedArchive{
-		Archival: archiver.Tar{},
+	format := archives.CompressedArchive{
+		Archival: archives.Tar{},
 	}
 
 	err = format.Archive(context.Background(), out, filesFiltered)

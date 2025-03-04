@@ -17,6 +17,7 @@ func cfgToESBuildCfg(cfg options) api.BuildOptions {
 		EntryPoints: cfg.ESBuild.EntryPoints,
 		Outdir:      cfg.ESBuild.Outdir,
 		Outfile:     cfg.ESBuild.Outfile,
+		Outbase:     cfg.ESBuild.Outbase,
 		Sourcemap:   api.SourceMap(cfg.ESBuild.Sourcemap),
 		Format:      api.Format(cfg.ESBuild.Format),
 		Splitting:   cfg.ESBuild.Splitting,
@@ -31,6 +32,7 @@ type options struct {
 	ESBuild struct {
 		EntryPoints      []string `yaml:"entryPoints"`
 		Outdir           string   `yaml:"outdir"`
+		Outbase          string   `yaml:"outbase"`
 		Outfile          string   `yaml:"outfile"`
 		Sourcemap        int      `yaml:"sourcemap"`
 		Format           int      `yaml:"format"`
@@ -42,8 +44,9 @@ type options struct {
 		PurgeBeforeBuild bool     `yaml:"purgeBeforeBuild"`
 	} `yaml:"esbuild"`
 	Watch struct {
-		Paths   []string `yaml:"paths"`
-		Exclude []string `yaml:"exclude"`
+		Paths            []string `yaml:"paths"`
+		Exclude          []string `yaml:"exclude"`
+		InjectLiveReload string   `yaml:"injectLiveReload"`
 	}
 	Serve struct {
 		Path string `yaml:"path"`
@@ -167,9 +170,12 @@ func processPaths(opts *options) {
 	for i, path := range opts.Watch.Paths {
 		opts.Watch.Paths[i] = fsutils.ResolvePath(path)
 	}
+
 	for i, path := range opts.Watch.Exclude {
 		opts.Watch.Exclude[i] = fsutils.ResolvePath(path)
 	}
+
+	// opts.Watch.Inject = fsutils.ResolvePath(opts.Watch.Inject)
 
 	// Serve path
 	opts.Serve.Path = fsutils.ResolvePath(opts.Serve.Path)
