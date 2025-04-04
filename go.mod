@@ -5,6 +5,7 @@ go 1.24
 require (
 	github.com/Iilun/survey/v2 v2.5.2
 	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/PuerkitoBio/goquery v1.10.2
 	github.com/evanw/esbuild v0.25.0
 	github.com/jaschaephraim/lrserver v0.0.0-20240306232639-afed386b3640
 	github.com/kataras/golog v0.1.12
@@ -25,6 +26,7 @@ require (
 	github.com/STARRY-S/zip v0.2.2 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20240724165105-aceaa0259138 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.0 // indirect

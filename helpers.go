@@ -2,14 +2,17 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/otiai10/copy"
 	"github.com/trading-peter/gowebbuild/fsutils"
@@ -158,26 +161,118 @@ func injectLR(opts options) {
 	}
 
 	htmlContent := string(contents)
-	scriptTag := `<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' localhost:35729;" /><script src="http://localhost:35729/livereload.js"></script>`
 
-	// Check if head tag exists and inject script reference
-	if strings.Contains(htmlContent, "</head>") && !strings.Contains(htmlContent, "livereload.js") {
-		newContent := strings.Replace(
-			htmlContent,
-			"<head>",
-			"<head>"+scriptTag+"\n",
-			1,
-		)
-
-		err = os.WriteFile(opts.Watch.InjectLiveReload, []byte(newContent), 0644)
-		if err != nil {
-			fmt.Printf("Failed to write live reload script reference: %v\n", err)
-			return
-		}
-		fmt.Printf("Injected live reload script reference into %s\n", opts.Watch.InjectLiveReload)
-	} else {
-		fmt.Printf("No </head> tag found or livereload.js already injected in %s\n", opts.Watch.InjectLiveReload)
+	// First modify CSP
+	cspModified, err := updateContentPolicyTag(htmlContent)
+	if err != nil {
+		fmt.Println("Error modifying CSP:", err)
+		return
 	}
+
+	// Then inject script
+	finalHTML, err := injectLiveReloadScript(cspModified)
+	if err != nil {
+		fmt.Println("Error injecting script:", err)
+		return
+	}
+
+	err = os.WriteFile(opts.Watch.InjectLiveReload, []byte(finalHTML), 0644)
+	if err != nil {
+		fmt.Printf("Failed to write live reload script reference: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Injected live reload script reference into %s\n", opts.Watch.InjectLiveReload)
+}
+
+func injectLiveReloadScript(html string) (string, error) {
+	// Check if script is already present
+	if strings.Contains(html, "livereload.js") {
+		return html, nil
+	}
+
+	// Find the closing body tag and inject script before it
+	bodyCloseRegex := regexp.MustCompile(`(?i)</body>`)
+	if !bodyCloseRegex.MatchString(html) {
+		return html, nil // Return unchanged if no body tag found
+	}
+
+	scriptTag := `<script src="http://localhost:35729/livereload.js" type="text/javascript"></script>`
+	newHTML := bodyCloseRegex.ReplaceAllString(html, scriptTag+"</body>")
+
+	return newHTML, nil
+}
+
+func updateContentPolicyTag(html string) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return html, err
+	}
+
+	liveReloadHost := "localhost:35729"
+	liveReloadURL := "http://" + liveReloadHost
+	liveReloadWS := "ws://" + liveReloadHost
+
+	doc.Find("meta[http-equiv='Content-Security-Policy']").Each(func(i int, s *goquery.Selection) {
+		if originalCSP, ok := s.Attr("content"); ok {
+			// Split CSP into individual directives
+			directives := strings.Split(originalCSP, ";")
+
+			// Look for script-src directive
+			scriptSrcFound := false
+			connectSrcFound := false
+
+			for i, directive := range directives {
+				trimmed := strings.TrimSpace(directive)
+
+				// Handle script-src directive
+				if strings.HasPrefix(trimmed, "script-src") {
+					// If script-src already exists, append localhost if not present
+					if !strings.Contains(trimmed, liveReloadURL) {
+						directives[i] = trimmed + " " + liveReloadURL
+					}
+					scriptSrcFound = true
+				}
+
+				// Handle connect-src directive
+				if strings.HasPrefix(trimmed, "connect-src") {
+					// If connect-src already exists, append WebSocket URL if not present
+					if !strings.Contains(trimmed, liveReloadWS) {
+						directives[i] = trimmed + " " + liveReloadWS
+					}
+					connectSrcFound = true
+				}
+			}
+
+			// If no script-src found, add it with 'self' as default
+			if !scriptSrcFound {
+				directives = append(directives, "script-src 'self' "+liveReloadURL)
+			}
+
+			// If no connect-src found, add it with 'self' as default
+			if !connectSrcFound {
+				directives = append(directives, "connect-src 'self' "+liveReloadWS)
+			}
+
+			// Join directives back together
+			newCSP := strings.Join(directives, ";")
+
+			// Ensure we don't have trailing semicolon if original didn't
+			if !strings.HasSuffix(originalCSP, ";") && strings.HasSuffix(newCSP, ";") {
+				newCSP = strings.TrimSuffix(newCSP, ";")
+			}
+
+			s.SetAttr("content", newCSP)
+		}
+	})
+
+	var buf bytes.Buffer
+	err = goquery.Render(&buf, doc.Selection)
+	if err != nil {
+		return html, err
+	}
+
+	return buf.String(), nil
 }
 
 func build(opts options) {
@@ -188,40 +283,6 @@ func build(opts options) {
 		triggerReload <- struct{}{}
 	}
 }
-
-// func createHTMLInjectionPlugin(scriptContent string) api.Plugin {
-// 	return api.Plugin{
-// 		Name: "html-injector",
-// 		Setup: func(build api.PluginBuild) {
-// 			build.OnLoad(api.OnLoadOptions{Filter: `\.html$`}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-// 				contents, err := os.ReadFile(args.Path)
-// 				if err != nil {
-// 					return api.OnLoadResult{}, err
-// 				}
-
-// 				htmlContent := string(contents)
-
-// 				// Create script tag with content
-// 				scriptTag := "<script>" + scriptContent + "</script>"
-
-// 				// Insert script tag before </head>
-// 				if strings.Contains(htmlContent, "</head>") {
-// 					htmlContent = strings.Replace(
-// 						htmlContent,
-// 						"</head>",
-// 						scriptTag+"</head>",
-// 						1,
-// 					)
-// 				}
-
-// 				return api.OnLoadResult{
-// 					Contents: &htmlContent,
-// 					Loader:   api.LoaderText, // or api.LoaderFile
-// 				}, nil
-// 			})
-// 		},
-// 	}
-// }
 
 func getGoModuleName(root string) (string, error) {
 	modFile := filepath.Join(root, "go.mod")
