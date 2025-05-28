@@ -96,9 +96,7 @@ func watchAction(ctx *cli.Context) error {
 
 			go func() {
 				for range reqBuildCh {
-					cp(opts)
-					build(opts)
-					replace(opts)
+					pipeline(opts)
 				}
 			}()
 		}
