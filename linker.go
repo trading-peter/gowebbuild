@@ -48,9 +48,36 @@ func link(from, to string) chan struct{} {
 		w.FilterOps(watcher.Write, watcher.Rename, watcher.Move, watcher.Create, watcher.Remove)
 		w.IgnoreHiddenFiles(true)
 
-		if err := w.AddRecursive(from); err != nil {
-			fmt.Println(err.Error())
-			os.Exit(1)
+		// Instead of watching the entire directory tree, only watch the package directories
+		// that we need to monitor
+		for _, packagePath := range packages {
+			err := filepath.Walk(packagePath, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+
+				// Skip excluded directories completely
+				if info.IsDir() && isExcludedPath(path, "node_modules", ".git") {
+					return filepath.SkipDir
+				}
+
+				// Only add directories and relevant files that aren't in excluded paths
+				if !isExcludedPath(path, "node_modules", ".git") {
+					if info.IsDir() {
+						return w.Add(path)
+					}
+					// Only watch JavaScript and TypeScript files
+					if isIncludedExt(info.Name(), "*.js", "*.ts") {
+						return w.Add(path)
+					}
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				fmt.Printf("Error setting up watcher for %s: %v\n", packagePath, err)
+			}
 		}
 
 		go func() {
