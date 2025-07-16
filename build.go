@@ -33,6 +33,8 @@ func buildAction(ctx *cli.Context) error {
 			esBuildCfg.Sourcemap = api.SourceMapNone
 		}
 
+		esBuildCfg.Plugins = append(esBuildCfg.Plugins, contentSwapPlugin(o))
+
 		api.Build(esBuildCfg)
 		replace(o)
 

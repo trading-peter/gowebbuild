@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["generate"]
+      "args": ["watch", "-c", "/home/pk/golang/plusev/terminal/.gowebbuild.yaml"]
     }
   ]
 }

@@ -162,15 +162,17 @@ func injectLR(opts options) {
 
 	htmlContent := string(contents)
 
-	// First modify CSP
-	cspModified, err := updateContentPolicyTag(htmlContent)
-	if err != nil {
-		fmt.Println("Error modifying CSP:", err)
-		return
+	if !opts.Watch.SkipCSPInject {
+		// First modify CSP
+		htmlContent, err = updateContentPolicyTag(htmlContent)
+		if err != nil {
+			fmt.Println("Error modifying CSP:", err)
+			return
+		}
 	}
 
 	// Then inject script
-	finalHTML, err := injectLiveReloadScript(cspModified)
+	finalHTML, err := injectLiveReloadScript(htmlContent)
 	if err != nil {
 		fmt.Println("Error injecting script:", err)
 		return
@@ -277,10 +279,40 @@ func updateContentPolicyTag(html string) (string, error) {
 
 func build(opts options) {
 	esBuildOpts := cfgToESBuildCfg(opts)
+
+	esBuildOpts.Plugins = append(esBuildOpts.Plugins, contentSwapPlugin(opts))
+
 	result := api.Build(esBuildOpts)
 
 	if len(result.Errors) == 0 {
 		triggerReload <- struct{}{}
+	}
+}
+
+func contentSwapPlugin(opts options) api.Plugin {
+	return api.Plugin{
+		Name: "content-swap",
+		Setup: func(build api.PluginBuild) {
+			build.OnLoad(api.OnLoadOptions{Filter: `.*`},
+				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					for _, swap := range opts.ContentSwap {
+						if strings.HasSuffix(args.Path, swap.File) {
+							fmt.Printf("Swapping content of %s with %s\n", args.Path, swap.ReplaceWith)
+
+							text, err := os.ReadFile(swap.ReplaceWith)
+							if err != nil {
+								return api.OnLoadResult{}, err
+							}
+							contents := string(text)
+							return api.OnLoadResult{
+								Contents: &contents,
+								Loader:   api.LoaderJS,
+							}, nil
+						}
+					}
+					return api.OnLoadResult{}, nil
+				})
+		},
 	}
 }
 

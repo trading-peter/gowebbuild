@@ -46,6 +46,8 @@ func watchAction(ctx *cli.Context) error {
 			}
 
 			for _, p := range opts.Watch.Paths {
+				w.Ignore(filepath.Join(p, ".git"))
+
 				if err := w.AddRecursive(p); err != nil {
 					fmt.Println(err.Error())
 					os.Exit(1)
@@ -56,7 +58,7 @@ func watchAction(ctx *cli.Context) error {
 				for {
 					select {
 					case event := <-w.Event:
-						fmt.Printf("File %s changed\n", event.Name())
+						fmt.Printf("File %s changed\n", event.Path)
 						pipeline(opts)
 					case err := <-w.Error:
 						fmt.Println(err.Error())

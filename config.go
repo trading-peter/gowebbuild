@@ -13,7 +13,7 @@ import (
 )
 
 func cfgToESBuildCfg(cfg options) api.BuildOptions {
-	return api.BuildOptions{
+	buildOptions := api.BuildOptions{
 		EntryPoints: cfg.ESBuild.EntryPoints,
 		Outdir:      cfg.ESBuild.Outdir,
 		Outfile:     cfg.ESBuild.Outfile,
@@ -26,6 +26,15 @@ func cfgToESBuildCfg(cfg options) api.BuildOptions {
 		Write:       cfg.ESBuild.Write,
 		LogLevel:    api.LogLevel(cfg.ESBuild.LogLevel),
 	}
+
+	// Set target if specified, otherwise default to modern ES for decorator support
+	if cfg.ESBuild.Target > 0 {
+		buildOptions.Target = api.Target(cfg.ESBuild.Target)
+	} else {
+		buildOptions.Target = api.ES2022
+	}
+
+	return buildOptions
 }
 
 type options struct {
@@ -41,12 +50,14 @@ type options struct {
 		Bundle           bool     `yaml:"bundle"`
 		Write            bool     `yaml:"write"`
 		LogLevel         int      `yaml:"logLevel"`
+		Target           int      `yaml:"target"`
 		PurgeBeforeBuild bool     `yaml:"purgeBeforeBuild"`
 	} `yaml:"esbuild"`
 	Watch struct {
 		Paths            []string `yaml:"paths"`
 		Exclude          []string `yaml:"exclude"`
 		InjectLiveReload string   `yaml:"injectLiveReload"`
+		SkipCSPInject    bool     `yaml:"skipCSPInject"`
 	}
 	Serve struct {
 		Path string `yaml:"path"`
@@ -65,6 +76,10 @@ type options struct {
 		Search  string `yaml:"search"`
 		Replace string `yaml:"replace"`
 	} `yaml:"replace"`
+	ContentSwap []struct {
+		File        string `yaml:"file"`
+		ReplaceWith string `yaml:"replaceWith"`
+	} `yaml:"contentSwap"`
 	Link struct {
 		From string `yaml:"from"`
 		To   string `yaml:"to"`
@@ -189,6 +204,12 @@ func processPaths(opts *options) {
 	// Download paths
 	for i := range opts.Download {
 		opts.Download[i].Dest = fsutils.ResolvePath(opts.Download[i].Dest)
+	}
+
+	// Content swap paths
+	for i := range opts.ContentSwap {
+		opts.ContentSwap[i].File = fsutils.ResolvePath(opts.ContentSwap[i].File)
+		opts.ContentSwap[i].ReplaceWith = fsutils.ResolvePath(opts.ContentSwap[i].ReplaceWith)
 	}
 
 	// Link paths
