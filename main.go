@@ -26,7 +26,7 @@ func main() {
 	app := &cli.App{
 		Name:    "gowebbuild",
 		Usage:   "All in one tool to build web frontend projects.",
-		Version: "7.2.0",
+		Version: "7.3.0",
 		Authors: []*cli.Author{{
 			Name: "trading-peter (https://github.com/trading-peter)",
 		}},
