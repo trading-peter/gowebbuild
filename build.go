@@ -35,7 +35,11 @@ func buildAction(ctx *cli.Context) error {
 
 		esBuildCfg.Plugins = append(esBuildCfg.Plugins, contentSwapPlugin(o))
 
-		api.Build(esBuildCfg)
+		result := api.Build(esBuildCfg)
+		if len(result.Errors) > 0 {
+			os.Exit(1)
+		}
+
 		replace(o)
 
 		if ctx.Bool("p") && o.ProductionBuildOptions.CmdPostBuild != "" {
