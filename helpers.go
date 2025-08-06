@@ -148,7 +148,7 @@ func replace(opts options) {
 	}
 }
 
-func injectLR(opts options) {
+func injectLR(lrport uint, opts options) {
 	if opts.Watch.InjectLiveReload == "" {
 		return
 	}
@@ -164,7 +164,7 @@ func injectLR(opts options) {
 
 	if !opts.Watch.SkipCSPInject {
 		// First modify CSP
-		htmlContent, err = updateContentPolicyTag(htmlContent)
+		htmlContent, err = updateContentPolicyTag(lrport, htmlContent)
 		if err != nil {
 			fmt.Println("Error modifying CSP:", err)
 			return
@@ -172,7 +172,7 @@ func injectLR(opts options) {
 	}
 
 	// Then inject script
-	finalHTML, err := injectLiveReloadScript(htmlContent)
+	finalHTML, err := injectLiveReloadScript(lrport, htmlContent)
 	if err != nil {
 		fmt.Println("Error injecting script:", err)
 		return
@@ -187,7 +187,7 @@ func injectLR(opts options) {
 	fmt.Printf("Injected live reload script reference into %s\n", opts.Watch.InjectLiveReload)
 }
 
-func injectLiveReloadScript(html string) (string, error) {
+func injectLiveReloadScript(lrport uint, html string) (string, error) {
 	// Check if script is already present
 	if strings.Contains(html, "livereload.js") {
 		return html, nil
@@ -199,19 +199,19 @@ func injectLiveReloadScript(html string) (string, error) {
 		return html, nil // Return unchanged if no body tag found
 	}
 
-	scriptTag := `<script src="http://localhost:35729/livereload.js" type="text/javascript"></script>`
+	scriptTag := fmt.Sprintf(`<script src="http://localhost:%d/livereload.js" type="text/javascript"></script>`, lrport)
 	newHTML := bodyCloseRegex.ReplaceAllString(html, scriptTag+"</body>")
 
 	return newHTML, nil
 }
 
-func updateContentPolicyTag(html string) (string, error) {
+func updateContentPolicyTag(lrport uint, html string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
 		return html, err
 	}
 
-	liveReloadHost := "localhost:35729"
+	liveReloadHost := fmt.Sprintf("localhost:%d", lrport)
 	liveReloadURL := "http://" + liveReloadHost
 	liveReloadWS := "ws://" + liveReloadHost
 
