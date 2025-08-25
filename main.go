@@ -85,8 +85,11 @@ $ gowebbuild replace *.go foo bar
 				Flags: []cli.Flag{
 					cfgParam,
 					&cli.UintFlag{
-						Name:  "lr-port",
-						Value: uint(lrserver.DefaultPort),
+						Name: "lr-port",
+						Value: (func() uint {
+							port := findFreePort(int(lrserver.DefaultPort), int(lrserver.DefaultPort)+100)
+							return uint(port)
+						}()),
 						Usage: "port for the live reload server",
 					},
 				},
